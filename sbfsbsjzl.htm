@@ -720,8 +720,8 @@
                 // 下载文件
                 XLSX.writeFile(wb, `社保费申报明细整理结果_${dateStr}.xlsx`);
                 
-                showNotification('文件下载已开始（包含合计行）', 'success');
-                addLog('生成并下载Excel文件：社保费申报明细整理结果_' + dateStr + '.xlsx（包含合计行）');
+                showNotification('文件下载已开始', 'success');
+                addLog('生成并下载Excel文件：社保费申报明细整理结果_' + dateStr + '.xlsx');
             } catch (error) {
                 showNotification('文件生成失败：' + error.message, 'danger');
             }
@@ -831,4 +831,5 @@
         });
     </script>
 </body>
+
 </html>
