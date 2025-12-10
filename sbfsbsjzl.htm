@@ -6,7 +6,10 @@
     <title>社保费客户端申报明细数据整理工具</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://cdn.jsdelivr.net/npm/font-awesome@4.7.0/css/font-awesome.min.css" rel="stylesheet">
+    <!-- 主CDN加载SheetJS -->
     <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+    <!-- 备用CDN地址（增加容错） -->
+    <script src="https://unpkg.com/xlsx@0.18.5/dist/xlsx.full.min.js" onerror="loadFallbackXLSX()"></script>
     
     <!-- 配置Tailwind自定义颜色和字体 -->
     <script>
@@ -833,3 +836,4 @@
 </body>
 
 </html>
+
