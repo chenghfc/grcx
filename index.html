@@ -148,32 +148,6 @@ function dk(){
             }
         }
     </script>
-
-<!--以下繁体简体转换 -->
-  <input type="text" id="text1" placeholder="输入原始文本"  size="70" >
-  <button onclick="convert1()">转换为繁体</button>
-  <button onclick="convert2()">转换为简体</button>
-  <textarea id="text2" rows="1" cols="100" placeholder="转换后文本"></textarea>
-  
-  <script src="./full.js"></script>
-  <script>
-    function convert1() {
-      // 初始化 OpenCC 转换器（简体转繁体，使用台湾标准）
-      const opencc = OpenCC.Converter({ from: 'cn', to: 'tw' });
-      const text = document.getElementById('text1').value;
-      const result = opencc(text);
-      document.getElementById('text2').value = result;
-    }
-    
-    function convert2() {
-      // 初始化 OpenCC 转换器（简体转繁体，使用台湾标准）
-      const opencc = OpenCC.Converter({ from: 'tw', to: 'cn' });
-      const text = document.getElementById('text1').value;
-      const result = opencc(text);
-      document.getElementById('text2').value = result;
-    }
-  </script> 
-
         </p>
         <p class="stylish-paragraph">
           内部链接
@@ -384,6 +358,7 @@ h1 {
 
 
 </style>
+
 
 
 
