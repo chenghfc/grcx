@@ -6,9 +6,9 @@
     <title>社保费客户端申报明细数据整理工具</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/4.7.0/css/font-awesome.min.css" rel="stylesheet">
-    <script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.3.0/exceljs.min.js"></script>
 
-    
+
     <!-- 配置Tailwind自定义颜色和字体 -->
     <script>
         tailwind.config = {
@@ -210,8 +210,6 @@
         </section>
     </main>
 
-
-
     <script>
         // 全局变量
         let excelFile = null;
@@ -293,64 +291,89 @@
             newProcessBtn.addEventListener('click', resetAll);
         }
         
-        // 处理文件选择
-        function handleFileSelection(file) {
-            // 验证文件类型
-            const fileTypes = [
-                'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-                'application/vnd.ms-excel'
-            ];
+// 处理文件选择
+function handleFileSelection(file) {
+    // 验证文件类型
+    const fileTypes = [
+        'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        'application/vnd.ms-excel'
+    ];
+    
+    if (!fileTypes.includes(file.type) && !file.name.endsWith('.xlsx') && !file.name.endsWith('.xls')) {
+        showNotification('请上传Excel格式的文件（.xlsx 或 .xls）', 'danger');
+        return;
+    }
+    
+    excelFile = file;
+    
+    // 显示文件信息
+    fileName.textContent = file.name;
+    fileSize.textContent = formatFileSize(file.size);
+    fileInfo.classList.remove('hidden');
+    processBtn.classList.remove('hidden');
+    processBtn.disabled = false;
+    
+    // 更新状态
+    status.innerHTML = '<i class="fa fa-check-circle text-success mr-1"></i> 文件已上传：' + file.name;
+    
+    // ===== 使用ExcelJS读取Excel文件 =====
+    const reader = new FileReader();
+    reader.onload = async function(e) {
+        try {
+            const buffer = e.target.result;
             
-            if (!fileTypes.includes(file.type) && !file.name.endsWith('.xlsx') && !file.name.endsWith('.xls')) {
-                showNotification('请上传Excel格式的文件（.xlsx 或 .xls）', 'danger');
-                return;
+            // 使用ExcelJS读取
+            const workbook = new ExcelJS.Workbook();
+            await workbook.xlsx.load(buffer);
+            
+            // 获取第一个工作表
+            const worksheet = workbook.worksheets[0];
+            
+            // 转换为JSON格式
+            rawData = [];
+            const headers = [];
+            
+            // 读取表头（第一行）
+            worksheet.getRow(1).eachCell((cell, colNumber) => {
+                headers[colNumber] = cell.value;
+            });
+            
+            // 读取数据行
+            worksheet.eachRow((row, rowNumber) => {
+                if (rowNumber === 1) return; // 跳过表头
+                
+                const rowData = {};
+                row.eachCell((cell, colNumber) => {
+                    const header = headers[colNumber];
+                    if (header) {
+                        rowData[header] = cell.value;
+                    }
+                });
+                
+                rawData.push(rowData);
+            });
+            
+            // 验证关键字段
+            const requiredFields = ['姓名', '证件号码', '费款所属期起', '缴费类型', '征收项目', '征收品目', '缴费基数', '应缴费额'];
+            const missingFields = requiredFields.filter(field => !Object.keys(rawData[0] || {}).includes(field));
+            
+            if (missingFields.length > 0) {
+                showNotification('Excel文件缺少必要字段：' + missingFields.join('、'), 'warning');
+                processBtn.disabled = true;
+            } else {
+                addLog('成功读取Excel文件，共 ' + rawData.length + ' 行数据');
+                rawCount.textContent = rawData.length;
             }
             
-            excelFile = file;
-            
-            // 显示文件信息
-            fileName.textContent = file.name;
-            fileSize.textContent = formatFileSize(file.size);
-            fileInfo.classList.remove('hidden');
-            processBtn.classList.remove('hidden');
-            processBtn.disabled = false;
-            
-            // 更新状态
-            status.innerHTML = '<i class="fa fa-check-circle text-success mr-1"></i> 文件已上传：' + file.name;
-            
-            // 读取Excel文件
-            const reader = new FileReader();
-            reader.onload = function(e) {
-                try {
-                    const data = new Uint8Array(e.target.result);
-                    const workbook = XLSX.read(data, { type: 'array' });
-                    
-                    // 获取第一个工作表
-                    const firstSheetName = workbook.SheetNames[0];
-                    const worksheet = workbook.Sheets[firstSheetName];
-                    
-                    // 转换为JSON
-                    rawData = XLSX.utils.sheet_to_json(worksheet);
-                    
-                    // 验证关键字段
-                    const requiredFields = ['姓名', '证件号码', '费款所属期起', '缴费类型', '征收项目', '征收品目', '缴费基数', '应缴费额'];
-                    const missingFields = requiredFields.filter(field => !Object.keys(rawData[0] || {}).includes(field));
-                    
-                    if (missingFields.length > 0) {
-                        showNotification('Excel文件缺少必要字段：' + missingFields.join('、'), 'warning');
-                        processBtn.disabled = true;
-                    } else {
-                        addLog('成功读取Excel文件，共 ' + rawData.length + ' 行数据');
-                        rawCount.textContent = rawData.length;
-                    }
-                    
-                } catch (error) {
-                    showNotification('文件解析错误：' + error.message, 'danger');
-                    processBtn.disabled = true;
-                }
-            };
-            reader.readAsArrayBuffer(file);
+        } catch (error) {
+            showNotification('文件解析错误：' + error.message, 'danger');
+            processBtn.disabled = true;
+            console.error('读取错误：', error);
         }
+    };
+    reader.readAsArrayBuffer(file);
+}
+
         
         // 辅助函数：将字符串格式的数值（可能包含千分位）转换为数字
         function parseNumber(value) {
@@ -440,7 +463,11 @@
                         row['职工姓名'] = group.baseData['姓名'];
                         row['职工身份证'] = group.baseData['证件号码'];
                         row['费款所属期'] = group.baseData['费款所属期起'];
-                        row['缴费类型'] = group.baseData['缴费类型'];
+                        const originalPaymentType = group.baseData['缴费类型'] || '';
+                        // 如果包含"基数调整补缴"字眼，则统一显示为"基数调整补缴"
+                        row['缴费类型'] = originalPaymentType.includes('基数调整补缴') 
+                        ? '基数调整补缴' 
+                        : originalPaymentType;
                         
                         // 提取各项数据
                         group.details.forEach(detail => {
@@ -476,8 +503,12 @@
                                 row['生育保险单位缴费'] = amount;
                             }
                         });
+
                         
                         // 计算合计项
+      updateProgress(90, '正在计算合计数据...');
+    addLog('计算各列合计值');                      
+                        
                         // 单位缴费合计
                         row['单位缴费合计'] = [
                             row['养老保险单位缴费'],
@@ -686,47 +717,329 @@
             addLog('已生成合计行，总缴费金额：' + totalData['缴费金额合计'].toFixed(2));
         }
         
-        // 下载结果（包含合计行）
-        function downloadResult() {
-            if (!resultData || resultData.length === 0) {
-                showNotification('没有可下载的结果数据', 'warning');
-                return;
-            }
+        // 优化列宽计算（解决列宽不足问题）
+        function calculateColumnWidths(data, columns) {
+            // 预设基础列宽（针对社保数据优化）
+            const baseWidths = {
+                '职工姓名': 8,
+                '职工身份证': 18,
+                '费款所属期': 10,
+                '缴费类型': 11,
+                '人社缴费基数': 12,
+                '养老保险单位缴费': 15,
+                '养老保险个人缴费': 15,
+                '失业保险单位缴费': 15,
+                '失业保险个人缴费': 15,
+                '工伤保险单位缴费': 15,
+                '医保缴费基数': 12,
+                '医疗保险单位缴费': 15,
+                '医疗保险个人缴费': 15,
+                '生育保险单位缴费': 15,
+                '单位缴费合计': 12,
+                '个人缴费合计': 12,
+                '缴费金额合计': 12
+            };
             
-            try {
-                // 复制结果数据并添加合计行
-                const exportData = [...resultData];
-                const totalData = calculateTotalData();
-                
-                // 处理合计行的数值格式（避免科学计数法）
-                Object.keys(totalData).forEach(col => {
-                    if (typeof totalData[col] === 'number') {
-                        totalData[col] = totalData[col].toFixed(2);
+            const widthMap = {};
+            
+            // 初始化列宽
+            columns.forEach(col => {
+                // 使用预设宽度或基础宽度，确保最小宽度
+                widthMap[col] = baseWidths[col] || Math.max(12, col.length * 1.8);
+            });
+            
+            // 遍历数据，确保内容能完整显示
+            data.forEach(row => {
+                columns.forEach(col => {
+                    let value = row[col] || '';
+                    if (typeof value === 'number') {
+                        value = value.toFixed(2);
+                    }
+                    // 计算内容所需宽度（中文字符占1.5，数字/字母占1）
+                    const charCount = String(value).split('').reduce((count, char) => {
+                        return count + (/[\u4e00-\u9fa5]/.test(char) ? 1.5 : 1);
+                    }, 0);
+                    const requiredWidth = charCount + 2; // 加2个字符的边距
+                    
+                    if (requiredWidth > widthMap[col]) {
+                        widthMap[col] = requiredWidth;
                     }
                 });
-                
-                exportData.push(totalData);
-                
-                // 创建工作簿和工作表
-                const ws = XLSX.utils.json_to_sheet(exportData);
-                const wb = XLSX.utils.book_new();
-                XLSX.utils.book_append_sheet(wb, ws, "数据整理结果");
-                
-                // 获取当前日期作为文件名一部分
-                const date = new Date();
-                const dateStr = date.getFullYear() + '-' + 
-                               String(date.getMonth() + 1).padStart(2, '0') + '-' + 
-                               String(date.getDate()).padStart(2, '0');
-                
-                // 下载文件
-                XLSX.writeFile(wb, `社保费申报明细整理结果_${dateStr}.xlsx`);
-                
-                showNotification('文件下载已开始', 'success');
-                addLog('生成并下载Excel文件：社保费申报明细整理结果_' + dateStr + '.xlsx');
-            } catch (error) {
-                showNotification('文件生成失败：' + error.message, 'danger');
-            }
+            });
+            
+            // 转换为Excel列宽单位（wch），向上取整
+            columns.forEach(col => {
+                widthMap[col] = Math.ceil(widthMap[col]);
+            });
+            
+            return widthMap;
         }
+
+/**
+ * 生成基数补缴统计数据
+ * @param {Array} data - 数据整理结果
+ * @returns {Array} 基数补缴统计数据
+ */
+function generateSubsidySummary(data) {
+    if (!data || data.length === 0) return [];
+    
+    // 按人员分组统计
+    const personMap = new Map();
+    
+    data.forEach(row => {
+        // 只统计"基数调整补缴"类型的数据
+        const paymentType = row['缴费类型'] || '';
+        if (!paymentType.includes('基数调整补缴')) {
+            return; // 跳过非基数调整补缴的数据
+        }
+        
+        const name = row['职工姓名'] || '';
+        const idCard = row['职工身份证'] || '';
+        const personalTotal = parseNumber(row['个人缴费合计']);
+        
+        // 使用身份证作为唯一标识
+        const key = idCard;
+        
+        if (!personMap.has(key)) {
+            personMap.set(key, {
+                '职工姓名': name,
+                '职工身份证': idCard,
+                '个人补缴合计': 0
+            });
+        }
+        
+        // 累加个人补缴金额
+        const person = personMap.get(key);
+        person['个人补缴合计'] += personalTotal;
+    });
+    
+    // 转换为数组并排序
+    const result = Array.from(personMap.values())
+        .filter(item => item['个人补缴合计'] > 0) // 过滤掉补缴金额为0的人员
+        .sort((a, b) => {
+            // 按姓名排序
+            return a['职工姓名'].localeCompare(b['职工姓名'], 'zh-CN');
+        });
+    
+    // 精确到分
+    result.forEach(item => {
+        item['个人补缴合计'] = Math.round(item['个人补缴合计'] * 100) / 100;
+    });
+    
+    return result;
+}
+
+        
+async function downloadResult() {
+    if (!resultData || resultData.length === 0) {
+        showNotification('没有可下载的结果数据', 'warning');
+        return;
+    }
+    
+    try {
+        // 创建工作簿
+        const workbook = new ExcelJS.Workbook();
+        const worksheet = workbook.addWorksheet('数据整理结果');
+        
+        // 准备数据
+        const exportData = [...resultData];
+        const totalData = calculateTotalData();
+        
+        // 处理合计行数值
+        Object.keys(totalData).forEach(col => {
+            if (typeof totalData[col] === 'number') {
+                totalData[col] = parseFloat(totalData[col].toFixed(2));
+            }
+        });
+        
+        exportData.push(totalData);
+        
+        const columns = Object.keys(resultData[0]);
+        
+        // 设置列定义（包含宽度）
+        worksheet.columns = columns.map(col => ({
+            header: col,
+            key: col,
+            width: {
+                '职工姓名': 8,
+                '职工身份证': 18,
+                '费款所属期': 10,
+                '缴费类型': 11,
+                '人社缴费基数': 12,
+                '养老保险单位缴费': 15,
+                '养老保险个人缴费': 15,
+                '失业保险单位缴费': 15,
+                '失业保险个人缴费': 15,
+                '工伤保险单位缴费': 15,
+                '医保缴费基数': 12,
+                '医疗保险单位缴费': 15,
+                '医疗保险个人缴费': 15,
+                '生育保险单位缴费': 15,
+                '单位缴费合计': 12,
+                '个人缴费合计': 12,
+                '缴费金额合计': 12
+            }[col] || 15
+        }));
+        
+        // 添加数据行
+        exportData.forEach(row => {
+            worksheet.addRow(row);
+        });
+        
+        // ===== 样式设置（ExcelJS完全支持）=====
+        
+        // 表头样式
+        worksheet.getRow(1).eachCell(cell => {
+                cell.font = { name: '宋体', size: 10, bold: true};
+                cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: '99ffff' } };
+                cell.alignment = { horizontal: 'center', vertical: 'middle', wrapText: true };
+                cell.border = {
+                    top: { style: 'thin', color: { argb: 'FF000000' } },
+                    left: { style: 'thin', color: { argb: 'FF000000' } },
+                    bottom: { style: 'thin', color: { argb: 'FF000000' } },
+                    right: { style: 'thin', color: { argb: 'FF000000' } }
+                };
+            });
+        worksheet.getRow(1).height = 13.5;
+        
+        // 数据行样式
+        const lastRowNum = worksheet.rowCount;
+        for (let i = 2; i < lastRowNum; i++) {
+            worksheet.getRow(i).eachCell(cell => {
+                cell.font = { name: '宋体', size: 10 };
+                cell.alignment = { horizontal: 'center', vertical: 'middle', wrapText: true };
+                cell.border = {
+                    top: { style: 'thin', color: { argb: 'FFCCCCCC' } },
+                    left: { style: 'thin', color: { argb: 'FFCCCCCC' } },
+                    bottom: { style: 'thin', color: { argb: 'FFCCCCCC' } },
+                    right: { style: 'thin', color: { argb: 'FFCCCCCC' } }
+                };
+            });
+            worksheet.getRow(i).height = 13.5;
+        }
+        
+        // 合计行样式
+        worksheet.getRow(lastRowNum).eachCell(cell => {
+                cell.font = { name: '宋体', size: 10, bold: true };
+                cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'ccffcc' } };
+                cell.alignment = { horizontal: 'center', vertical: 'middle', wrapText: true };
+                cell.border = {
+                    top: { style: 'thin', color: { argb: 'FFCCCCCC' } },
+                    left: { style: 'thin', color: { argb: 'FFCCCCCC' } },
+                    bottom: { style: 'thin', color: { argb: 'FFCCCCCC' } },
+                    right: { style: 'thin', color: { argb: 'FFCCCCCC' } }
+                };
+            });
+        worksheet.getRow(lastRowNum).height = 13.5;
+ 
+  // ==================== 第二个工作表：基数补缴统计 ====================
+        const summarySheet = workbook.addWorksheet('基数补缴统计');
+        
+        // 生成基数补缴统计数据
+        const subsidyData = generateSubsidySummary(resultData);
+        
+        // 设置列定义
+        summarySheet.columns = [
+            { header: '职工姓名', key: '职工姓名', width: 12 },
+            { header: '职工身份证', key: '职工身份证', width: 20 },
+            { header: '个人补缴合计', key: '个人补缴合计', width: 15 }
+        ];
+        
+        // 添加数据行
+        subsidyData.forEach(row => {
+            summarySheet.addRow(row);
+        });
+        
+        // 添加合计行
+        if (subsidyData.length > 0) {
+            const subsidyTotal = {
+                '职工姓名': '合计',
+                '职工身份证': '',
+                '个人补缴合计': subsidyData.reduce((sum, row) => sum + (row['个人补缴合计'] || 0), 0)
+            };
+            summarySheet.addRow(subsidyTotal);
+        }
+        
+        // ===== 基数补缴统计表样式 =====
+        
+        // 表头样式
+        summarySheet.getRow(1).eachCell(cell => {
+            cell.font = { name: '宋体', size: 10, bold: true };
+            cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: '99ffff' } };
+            cell.alignment = { horizontal: 'center', vertical: 'middle', wrapText: true };
+            cell.border = {
+                top: { style: 'thin', color: { argb: 'FF000000' } },
+                left: { style: 'thin', color: { argb: 'FF000000' } },
+                bottom: { style: 'thin', color: { argb: 'FF000000' } },
+                right: { style: 'thin', color: { argb: 'FF000000' } }
+            };
+        });
+        summarySheet.getRow(1).height = 13.5;
+        
+        // 数据行样式
+        const summaryLastRow = summarySheet.rowCount;
+        for (let i = 2; i < summaryLastRow; i++) {
+            summarySheet.getRow(i).eachCell((cell, colNumber) => {
+                cell.font = { name: '宋体', size: 10 };
+                cell.alignment = { horizontal: 'center', vertical: 'middle', wrapText: true };
+                cell.border = {
+                    top: { style: 'thin', color: { argb: 'FFCCCCCC' } },
+                    left: { style: 'thin', color: { argb: 'FFCCCCCC' } },
+                    bottom: { style: 'thin', color: { argb: 'FFCCCCCC' } },
+                    right: { style: 'thin', color: { argb: 'FFCCCCCC' } }
+                };
+            });
+            summarySheet.getRow(i).height = 13.5;
+        }
+        
+        // 合计行样式
+        if (summaryLastRow > 1) {
+            summarySheet.getRow(summaryLastRow).eachCell((cell, colNumber) => {
+                cell.font = { name: '宋体', size: 10, bold: true };
+                cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'ccffcc' } };
+                cell.alignment = { horizontal: 'center', vertical: 'middle', wrapText: true };
+                cell.border = {
+                    top: { style: 'thin', color: { argb: 'FF000000' } },
+                    left: { style: 'thin', color: { argb: 'FF000000' } },
+                    bottom: { style: 'thin', color: { argb: 'FF000000' } },
+                    right: { style: 'thin', color: { argb: 'FF000000' } }
+                };
+            });
+            summarySheet.getRow(summaryLastRow).height = 13.5;
+        }
+ 
+ 
+ 
+ 
+ 
+ 
+        
+        // 生成文件
+        const date = new Date();
+        const dateStr = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+        const fileName = `社保费申报明细整理结果_${dateStr}.xlsx`;
+        
+        // 导出为Blob并下载
+        const buffer = await workbook.xlsx.writeBuffer();
+        const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+        
+        // 创建下载链接
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = fileName;
+        a.click();
+        window.URL.revokeObjectURL(url);
+        
+        showNotification('文件下载成功！', 'success');
+        addLog(`生成并下载Excel文件：${fileName}（ExcelJS版本）`);
+        
+    } catch (error) {
+        console.error('Excel导出错误：', error);
+        showNotification('文件生成失败：' + error.message, 'danger');
+    }
+}
+
         
         // 辅助函数 - 更新进度
         function updateProgress(percent, text) {
@@ -832,11 +1145,4 @@
         });
     </script>
 </body>
-
 </html>
-
-
-
-
-
-
